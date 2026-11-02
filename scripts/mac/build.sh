@@ -23,6 +23,7 @@ cd "$ROOT"
 CONFIG=Debug
 BUNDLE_ID=""
 TEAM=""
+DEVICE=""
 OUT=""
 DERIVED="$ROOT/build/DerivedData-ideck"
 DO_INSTALL=0
@@ -38,6 +39,7 @@ while [ $# -gt 0 ]; do
     --team) TEAM="${2:?}"; shift 2 ;;
     --bundle-id) BUNDLE_ID="${2:?}"; shift 2 ;;
     --out) OUT="${2:?}"; shift 2 ;;
+    --device) DEVICE="${2:?}"; shift 2 ;;
     --derived) DERIVED="${2:?}"; shift 2 ;;
     --build-number) BUILD_NUMBER="${2:?}"; shift 2 ;;
     --install) DO_INSTALL=1; shift ;;
@@ -174,7 +176,13 @@ if [ "$DO_INSTALL" -eq 1 ]; then
     echo "error: --install needs --team (an unsigned bundle cannot be installed)" >&2
     exit 1
   fi
-  echo "== connected devices"
-  xcrun devicectl list devices || true
-  echo "Re-run with: xcrun devicectl device install app --device <UDID> \"$APP\"" 
+  if [ -z "$DEVICE" ]; then
+    echo "== connected devices (pass --device <UDID> to install automatically)"
+    xcrun devicectl list devices || true
+    echo
+    echo "Then: xcrun devicectl device install app --device <UDID> \"$APP\""
+    exit 0
+  fi
+  echo "== installing on $DEVICE"
+  xcrun devicectl device install app --device "$DEVICE" "$APP"
 fi

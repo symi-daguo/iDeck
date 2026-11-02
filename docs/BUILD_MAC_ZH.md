@@ -97,15 +97,13 @@ scripts/mac/build.sh --bundle-id com.symi.ideck.steamui
 ### 4.2 直接装到插着的设备（需要 Apple 开发者团队）
 
 ```sh
-scripts/mac/build.sh --team <你的TEAMID> --bundle-id com.symi.ideck.steamui --install
+scripts/mac/build.sh --team <你的TEAMID> --bundle-id com.symi.ideck.steamui \
+  --install --device <UDID>
 ```
 
-`--team` 会打开自动签名，Xcode 会自动为 app 与 `MadeiraJITHelper` 申请带 `get-task-allow` 的开发描述文件，并把 `Increased Memory Limit` 能力加到 App ID 上。跑完会列出已连接设备，然后：
+不知道 UDID 就先不加 `--device`：脚本会签名、打包，然后打印 `xcrun devicectl list devices` 的结果，你挑一台再重跑。
 
-```sh
-xcrun devicectl device install app --device <UDID> \
-  build/DerivedData-ideck/Build/Products/Debug-iphoneos/Madeira.app
-```
+`--team` 会打开自动签名，Xcode 会自动为 app 与 `MadeiraJITHelper` 申请带 `get-task-allow` 的开发描述文件，并把 `Increased Memory Limit` 能力加到 App ID 上。装完之后手动启动一次，确认没被系统秒杀。
 
 ### 4.3 生成的命令行（万一要手敲）
 
