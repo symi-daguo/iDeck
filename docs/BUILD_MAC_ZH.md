@@ -63,7 +63,7 @@ python3 tools/ideck-bootstrap.py --mirror https://ghfast.top/
 | 6 | 补微软 VC++ 运行库（见下） | ~10 MB |
 | 7 | 生成许可证副本 + 跑预检 | — |
 
-`--mirror` 可以换成任何能代理 `github.com` 的前缀，例如 `https://gh-proxy.com/`。不走镜像就省略这个参数。
+`--mirror` 可以换成任何能代理 `github.com` 的前缀，例如 `https://gh-proxy.com/`。它同时作用于两处：HTTP 下载（IPA / relink / llvm-mingw）和 FEX 的 git fetch（通过 `url.<mirror>.insteadOf` 重写）。不走镜像就省略这个参数。
 
 ### 关于微软 VC++ 运行库
 

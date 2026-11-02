@@ -253,6 +253,16 @@ def stage_relink(args, root, assets):
         (root / rel).mkdir(parents=True, exist_ok=True)
 
 
+def git(args, *parts, cwd=None, check=True):
+    """git with the optional mirror applied to every github.com URL."""
+    cmd = ['git']
+    if args.mirror:
+        cmd += ['-c', 'url.%s/https://github.com/.insteadOf=https://github.com/'
+                % args.mirror.rstrip('/')]
+    cmd += [str(p) for p in parts]
+    return run(cmd, cwd=cwd, check=check)
+
+
 def stage_fex(args, root):
     step('FEX source (headers the app target #includes)')
     fex = root / 'FEX'
@@ -260,23 +270,22 @@ def stage_fex(args, root):
     if sentinel.is_file() and (fex / 'External/fmt/include/fmt').is_dir():
         log('  cached  FEX headers already present')
     else:
-        if not (root / '.git').exists():
-            # Source tarball checkout: FEX is an empty directory, no gitlink.
-            # Never wipe it wholesale: relink archives may already be staged in
-            # FEX/build-ios, and this step runs again on every invocation.
-            if fex.exists() and any(fex.iterdir()) and not (fex / '.git').exists():
-                log('  WARNING FEX is not empty and not a git tree; leaving it alone')
-            elif fex.exists():
+        # Fetch the pinned commit directly rather than through `git submodule`,
+        # which clones the whole default branch first and is the first thing to
+        # break on a flaky link. A nested repository whose HEAD is the recorded
+        # gitlink also keeps the parent tree clean.
+        if not (fex / '.git').exists():
+            # Only FEX/build-ios (staged archives) survives a re-initialisation;
+            # git ignores it as untracked, and the relink stage re-creates it.
+            if fex.exists() and not (fex / 'build-ios').exists():
                 shutil.rmtree(fex)
             fex.mkdir(parents=True, exist_ok=True)
-            run(['git', 'init', '-q'], cwd=fex)
-            run(['git', 'remote', 'add', 'origin', PINNED['fex_url']], cwd=fex)
-            run(['git', 'fetch', '--depth', '1', 'origin', PINNED['fex_commit']], cwd=fex)
-            run(['git', 'checkout', '-q', 'FETCH_HEAD'], cwd=fex)
-        else:
-            run(['git', 'submodule', 'update', '--init', '--depth', '1', 'FEX'], cwd=root)
+            git(args, 'init', '-q', cwd=fex)
+            git(args, 'remote', 'add', 'origin', PINNED['fex_url'], cwd=fex)
+        git(args, 'fetch', '--depth', '1', 'origin', PINNED['fex_commit'], cwd=fex)
+        git(args, 'checkout', '-q', 'FETCH_HEAD', cwd=fex)
         for sub in PINNED['fex_header_submodules']:
-            run(['git', 'submodule', 'update', '--init', '--depth', '1', '--', sub], cwd=fex)
+            git(args, 'submodule', 'update', '--init', '--depth', '1', '--', sub, cwd=fex)
     for needed in ('FEXCore/include/FEXCore', 'FEXHeaderUtils', 'External/fmt/include/fmt',
                    'External/range-v3/include/range/v3', 'External/unordered_dense/include/ankerl'):
         path = fex / needed
