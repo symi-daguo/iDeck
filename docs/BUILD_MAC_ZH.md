@@ -103,7 +103,7 @@ scripts/mac/build.sh --team <你的TEAMID> --bundle-id com.symi.ideck.steamui \
 
 不知道 UDID 就先不加 `--device`：脚本会签名、打包，然后打印 `xcrun devicectl list devices` 的结果，你挑一台再重跑。
 
-`--team` 会打开自动签名，Xcode 会自动为 app 与 `MadeiraJITHelper` 申请带 `get-task-allow` 的开发描述文件，并把 `Increased Memory Limit` 能力加到 App ID 上。装完之后手动启动一次，确认没被系统秒杀。
+`--team` 会打开自动签名，Xcode 会自动为 app 与 `MadeiraJITHelper` 申请带 `get-task-allow` 的开发描述文件，并把 `Increased Memory Limit` 能力加到 App ID 上。打包前脚本会自动跑一次产物校验，有 FAIL 就停下不打包。装完之后手动启动一次，确认没被系统秒杀。
 
 ### 4.3 生成的命令行（万一要手敲）
 
@@ -120,7 +120,46 @@ xcodebuild -project app/Madeira.xcodeproj -scheme Madeira \
 
 ---
 
-## 5. 这一步之前该看到什么
+## 5. 能验证到哪一层（含：模拟器为什么不行）
+
+### 5.1 iOS 模拟器跑不了，这不是配置问题
+
+想把 App 装进模拟器点一下，是不可能成功的，原因写在代码里：
+
+| 阻碍 | 证据 |
+| --- | --- |
+| 静态库只有设备版 | relink 的链接目标是 `arm64-apple-ios26.0`（`link-args.json` 的 `-target`），没有 simulator 变体，链接阶段直接报 `building for iOS Simulator, but linking in object file built for iOS` |
+| JIT 在模拟器里不存在 | `docs/JIT.md:46-48` 原文：内置 StikJIT「is unavailable in the simulator and inside LiveContainer」 |
+| 没有 JIT 就没有 Wine | FEX 要在运行时生成可执行内存，模拟器不提供这条路径 |
+
+`tools/ideck-verify-app.py` 会检查 Mach-O 的 `LC_BUILD_VERSION` 平台字段，一旦发现是 Simulator 产物就直接判 FAIL，避免把错包签出去。
+
+### 5.2 macOS 虚拟机可以做什么
+
+| 场景 | 可行性 |
+| --- | --- |
+| 在 macOS 虚拟机里装 Xcode、`bootstrap`、`xcodebuild`、打包 IPA | **可以**，只要能分配 ≥ 8 GB 内存、≥ 40 GB 磁盘，并装 Xcode 27 |
+| 在虚拟机里跑 iOS 模拟器看界面 | 可以启动模拟器，但装不进这个 App（见 5.1） |
+| 在虚拟机里做签名并装真机 | 需要把 iPad 直通进虚拟机（USB 直通），否则 `devicectl` 看不到设备 |
+| 在虚拟机里验证 JIT / Steam / 游戏 | **不行**，虚拟机没有 A 系列/M 系列真机的 JIT 路径 |
+
+结论：虚拟机只适合验证「能不能编译出完整包」，功能验证必须回到真机。
+
+### 5.3 验证阶梯
+
+| 层 | 在哪做 | 命令 | 能证明什么 |
+| --- | --- | --- | --- |
+| 1 输入完整性 | 任意系统 | `python3 tools/ideck-preflight.py` | 工程引用的每个输入都在位（35 项） |
+| 2 编译链接 | Mac / macOS 虚拟机 | `scripts/mac/build.sh` | 代码能过 Swift 编译、C/ObjC 编译和链接 |
+| 3 产物结构 | 任意系统 | `python3 tools/ideck-verify-app.py <.app>` | 是设备版、arm64、扩展与运行时目录齐全、权限正确（19 项） |
+| 4 包结构 | 任意系统 | `python3 tools/ideck-verify-ipa.py <.ipa>` | 扩展没被丢、bundle id 正确、get-task-allow 在（15 项） |
+| 5 安装 | 真机 | Sideloadly / `devicectl` | 签名与描述文件被设备接受 |
+| 6 JIT | 真机 | App 内 Enable JIT | 调试器能附加、可执行内存能分配 |
+| 7 功能 | 真机 | 进 Steam、登录、开游戏 | 真正的可用性 |
+
+第 2 步是唯一必须 macOS 的一步，其余都能在任意系统先跑一遍。
+
+## 6. 这一步之前该看到什么
 
 `tools/ideck-bootstrap.py` 结尾会跑 `tools/ideck-preflight.py`，正常输出：
 
@@ -143,7 +182,7 @@ READY with warnings. Warnings above do not stop xcodebuild.
 
 ---
 
-## 6. 常见失败对照
+## 7. 常见失败对照
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
@@ -159,12 +198,13 @@ READY with warnings. Warnings above do not stop xcodebuild.
 
 ---
 
-## 7. 已经验证过什么，没验证什么
+## 8. 已经验证过什么，没验证什么
 
 | 项目 | 状态 | 证据 |
 | --- | --- | --- |
-| 引导脚本全流程（含 FEX 拉取、静态库落位、vcruntime） | **已验证**，在 Windows 上真实执行 | 预检 `34 ok / 0 fail` |
+| 引导脚本全流程（含 FEX 拉取、静态库落位、vcruntime） | **已验证**，在 Windows 上真实执行 | 预检 `35 ok / 0 fail` |
 | 预检本身与发布的 IPA 对齐 | **已验证** | 对 Build 99 IPA 跑 `ideck-verify-ipa.py`：15/15 通过 |
+| 产物校验器 | **已验证** | 对 Build 99 解包出的 `.app` 跑 `ideck-verify-app.py`：19/19；畸形包负向测试：6 项 FAIL、退出码 1 |
 | 两个分支的 `project.pbxproj` 都能解析 | **已验证** | main 152 refs / feature 154 refs，均 20 库 8 目录 |
 | `xcodebuild` 编译与链接 | **未验证** | 只能在 Mac 上做，Windows 无 iOS SDK |
 | 签名、安装、JIT、进 Steam、跑游戏 | **未验证** | 必须真机 |
@@ -173,7 +213,7 @@ READY with warnings. Warnings above do not stop xcodebuild.
 
 ---
 
-## 8. 相关文档
+## 9. 相关文档
 
 - `docs/INSTALL_IPHONE_ZH.md` — 装到 iPhone、开 JIT、第一次进 Steam
 - `docs/BUILDING.md` — 上游的完整构建记录（含从源码重编 FEX/Wine/DXMT，那是以「小时」为单位的事）

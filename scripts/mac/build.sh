@@ -144,6 +144,12 @@ APP="$DERIVED/Build/Products/$CONFIG-iphoneos/Madeira.app"
 [ -d "$APP" ] || { echo "error: built product not found at $APP" >&2; exit 1; }
 echo "== built $(du -sh "$APP" | cut -f1) app bundle"
 
+echo "== verifying the product (no device needed)"
+if ! python3 tools/ideck-verify-app.py "$APP" --expect-bundle-id "$BUNDLE_ID"; then
+  echo "error: the product failed verification; not packaging it" >&2
+  exit 1
+fi
+
 if [ "$DO_PACKAGE" -eq 1 ]; then
   OUT="${OUT:-$ROOT/build/iDeck-$(date +%Y%m%d-%H%M)-$BUNDLE_ID.ipa}"
   if [ -e "$OUT" ] && [ "$FORCE" -eq 0 ]; then

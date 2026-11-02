@@ -1,6 +1,8 @@
 # 装到 iPhone / iPad 并开 JIT（中文）
 
-前提：设备已升到 **iOS / iPadOS 26 或更新**（`IPHONEOS_DEPLOYMENT_TARGET = 26.0`，装不上的系统会直接拒绝安装）。Apple ID 建议用你的**港区付费开发者账号**，因为 LocalDevVPN 不在中国区上架。
+前提：设备已升到 **iPadOS / iOS 26 或更新**（`IPHONEOS_DEPLOYMENT_TARGET = 26.0`，低于此版本直接拒绝安装）。Apple ID 用你的**港区付费开发者账号**，因为 LocalDevVPN 不在中国区上架。
+
+**本文以 iPad Pro 2025（M4）为主目标**，iPhone 14 Pro Max 作为对照。原因见下面 F 节：iPad 内存更宽裕，但有一条已知的地址空间失败路径，需要先调参数。
 
 两条路，先走 A 验证链路，再走 B 做开发。
 
@@ -92,18 +94,70 @@ JIT 是这台设备上跑 Windows 代码的前提：Wine + FEX 需要在运行�
 
 ---
 
-## F. 你的两台设备
+## F. iPad Pro 2025（M4）专项
 
-| 设备 | 判断 |
-| --- | --- |
-| **iPhone 14 Pro Max**（A16，6 GB） | 系统没问题；**内存是硬短板**。Steam 的 CEF 是一整个 Chromium，和游戏同时驻留时容易被 jetsam 杀掉。作者只在 8 GB 的 15 Pro Max 上验证过 |
-| **iPad Pro 2025**（M4） | 内存充足，但 iPad 有**公开的失败案例**：`docs/IDECK_IPAD_ADDRESS_SPACE.md:6-20` 记录 iPad15,3 / iPadOS 27.0.1 + Build67 IPA，运行时只剩 639 MiB 虚拟地址空间，拒绝 4 GiB 客户机窗口，子进程启动即 `0xc0000017` |
+### F1. 为什么主推 iPad
 
-结论：**先用 iPhone 14 Pro Max 验证主链路**，iPad 当第二目标，做好它卡在地址空间那一步的心理准备。
+| 维度 | iPad Pro 2025 (M4) | iPhone 14 Pro Max |
+| --- | --- | --- |
+| 内存 | 8 / 16 GB（按配置） | 6 GB |
+| 屏幕 | 更适合 Big Picture 与手柄 | 偏小，控件遮挡多 |
+| 仓库验证状态 | **未验证**，且有公开失败案例 | 未验证（作者验证机是 8 GB 的 15 Pro Max） |
+| 已知风险 | 32 位子进程的虚拟地址空间不足 | 内存不足被 jetsam 杀掉 |
 
----
+两边都不是「官方支持」，但 iPad 的内存更像能扛住 CEF。
 
-## G. 排错
+### F2. 已知的地址空间失败，先认清日志
+
+`docs/IDECK_IPAD_ADDRESS_SPACE.md:6-20` 记录过一台 iPad（iPadOS 27.0.1 + Build67 IPA）在子进程启动阶段直接失败：
+
+```
+[wow-window] refused: map too small (639 MB free VA; a window needs 4096 MB
+plus MADEIRA_WOW_MIN_FREE_GB=8 left over)
+```
+
+这段话的含义：每个 32 位 Windows 进程都要独占一块 **4 GiB** 的宿主虚拟地址窗口，而且外面还要留 `MADEIRA_WOW_MIN_FREE_GB`（默认 8 GiB）余量。检查发生在 `build/ntdll-unix/virtual_ios.c:10466` 的 `ios_wow_map_allows_window()`。
+
+两个可调门槛（写进 `Documents/madeira.cfg`）：
+
+| 键 | 默认 | 作用 |
+| --- | --- | --- |
+| `env.MADEIRA_WOW_MIN_MAP_GB` | 48 | 整个地址空间小于它就直接拒绝 |
+| `env.MADEIRA_WOW_MIN_FREE_GB` | 8 | 留多少 GiB 余量才允许开 4 GiB 窗口 |
+
+判断方法看日志里的数字：
+
+- 剩余 VA **≥ 4 GiB 但不到 12 GiB** → 是「余量门槛」挡的，可以降 `MADEIRA_WOW_MIN_FREE_GB` 试；
+- 剩余 VA **< 4 GiB**（上面那台是 639 MB）→ 调门槛没有意义，窗口本身就放不下，这条路在 iPad 上走不通。
+
+降门槛是有代价的：它是为了保护 64 位一侧不被挤爆，调小之后可能换成另一种崩溃。
+
+### F3. 建议的初始 madeira.cfg
+
+App 内的设置在 `Documents/madeira.cfg`，一行一个键（`docs/madeira.cfg.example`）。iPad 首次启动后可以先放这份：
+
+```ini
+# 把 guest 内存放到文件-backed，iOS 不把它算进 jetsam 占用（ml1077）
+swap-mb = 3072
+env.MADEIRA_SWAP_COVERAGE = broad
+# 显存与对象池按 iPad 抬高
+vram-mb = 1536
+pool = 640
+totalphys = 4096
+# 只有日志显示是「余量」挡住时，才动这一行
+env.MADEIRA_WOW_MIN_FREE_GB = 1
+```
+
+改完杀掉 App 重开才生效。
+
+### F4. iPad 上的操作差异
+
+- **横屏**：Big Picture 按 16:9 设计，iPad 竖屏会有大黑边，进 Steam 前先转横屏。
+- **文件**：`UIFileSharingEnabled` 为 true，Steam 客户端/游戏可以用「文件」App 拷进 iDeck 的 `Documents`。
+- **外接手柄**：iPad 直接连蓝牙手柄即可，比 iPhone 好按。
+- **分屏/台前调度**：先关掉。窗口尺寸变化会触发重新布局，第一次验证不要引入这个变量。
+
+## G. 排错对照
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
