@@ -196,3 +196,26 @@ Steam32OfficialClient/
 app/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/Info.plist
 app/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/Modules/StikJIT.swiftmodule/*.swiftmodule
 app/Frameworks/StikJIT.xcframework/ios-arm64/StikJIT.framework/Modules/StikJIT.swiftmodule/*.swiftsourceinfo
+
+# iDeck bootstrap cache (release assets; hundreds of MB, never commit)
+.ideck-assets/
+
+# Runtime payloads staged by tools/ideck-bootstrap.py: the public snapshot ships
+# only the three tracked farm stubs, everything else comes from the IPA.
+app/Madeira/arm64ec-windows/*
+!app/Madeira/arm64ec-windows/.gitkeep
+!app/Madeira/arm64ec-windows/bthprops.cpl
+!app/Madeira/arm64ec-windows/wineios.drv
+!app/Madeira/arm64ec-windows/winspool.drv
+app/Madeira/aarch64-windows/
+app/Madeira/x86_64-vcruntime/*
+!app/Madeira/x86_64-vcruntime/.gitkeep
+app/Madeira/licenses/LICENSE-MADEIRA-GPL-3.0.txt
+app/Madeira/licenses/LICENSE-MADEIRA-EXCEPTION.txt
+
+# Bundled by tools/ideck-bootstrap.py from the IPA; upstream does not track them.
+app/Frameworks/**/_CodeSignature/
+app/Madeira/licenses/components/
+app/Madeira/legal/CREDITS.md
+app/Madeira/legal/NOTICE
+app/Madeira/SteamClientPackages.json

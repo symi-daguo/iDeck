@@ -120,6 +120,19 @@ Build 54 使用旧的设置入口，没有这套六步检查。
 
 ## 从源码构建
 
+**最省事的一条路（本仓库新增）**：不需要逐项手工准备输入，两条命令完成。
+
+```sh
+git clone https://github.com/symi-daguo/iDeck.git && cd iDeck
+python3 tools/ideck-bootstrap.py --mirror https://ghfast.top/   # 补齐运行时/静态库/FEX/工具链
+scripts/mac/build.sh --bundle-id com.symi.ideck.steamui          # 出 IPA
+```
+
+细节、分支选择与排错见 **[Mac 构建说明（中文）](docs/BUILD_MAC_ZH.md)** 与
+**[装机与 JIT（中文）](docs/INSTALL_IPHONE_ZH.md)**。
+
+上游的通用流程：
+
 ```sh
 git clone --recurse-submodules https://github.com/kuscholar/iDeck.git
 cd iDeck
