@@ -178,3 +178,43 @@ env.MADEIRA_WOW_MIN_FREE_GB = 1
 - 登录态、游戏、存档都在 App 的 `Documents` 里（Wine 前缀内）。
 - **删除 App 会连它们一起删**（`README.md:51-53`）。升级前先备份。
 - 升级安装请保持同一个 bundle ID 和同一个签名团队，否则系统会当成两个 App，数据不互通。
+
+## I. 安全、保修与签名
+
+### I1. 会不会弄坏平板
+
+**软件层面不会。** App 跑在沙盒里，JIT 走的是 Apple 官方的调试器附加机制（开发者模式 + 配对文件 + 本地回环），不写系统分区、不碰基带、不越狱。开发者模式是系统自带功能，随时可以关掉。保修不受影响。
+
+真正需要在意的是这三件事：
+
+| 风险 | 实际情况 | 怎么处理 |
+| --- | --- | --- |
+| **发热与电池老化** | FEX 指令翻译 + Wine + CEF + Metal 四层叠加，这是持续高负载。短时间跑没问题，长期边充电边跑重负载会加速电池老化 | 首次验证按 15–20 分钟一轮，摸背面温度；别放在床面/被面上；别边充边跑 |
+| **存储占用** | 客户端 + 前缀 + 游戏，几十 GB 起 | 留足空间，别在剩余空间 <10 GB 时验证 |
+| **开发者模式** | 打开后本机允许调试器附加，安全性低于默认状态 | 自己专用的机器没问题；验证完可以关掉，代价是 JIT 不可用 |
+
+不会发生的事：变砖、改系统分区、影响其他 App、需要重装系统。OOM 被系统杀掉、崩溃循环导致重启，都是正常保护行为，不是损坏。
+
+### I2. 需要额外买签名吗
+
+不需要。你是 Apple Developer Program 成员，用**自己的开发证书**就够。但有两个动作绕不开：
+
+| 项目 | 说明 |
+| --- | --- |
+| 发布的 IPA 装不上 | 它是 ad-hoc 签名、不含描述文件（`docs/INSTALL_IPA.md:5-8`），必须用你自己的证书重签 |
+| 必须是 Development 描述文件 | Distribution / App Store 描述文件的 `get-task-allow` 为 false，JIT 直接失效。付费账号用错类型一样不行 |
+| App ID 需要 Increased Memory Limit | entitlements 里带 `com.apple.developer.kernel.increased-memory-limit`，profile 缺这个能力会签名或安装失败 |
+| 设备要在描述文件里 | 开发描述文件按 UDID 授权，付费账号每年 100 台 |
+
+不需要：企业证书、TestFlight、越狱、任何付费签名服务。`scripts/mac/build.sh --team <TEAMID>` 会自动申请带 `get-task-allow` 的开发描述文件，并把内存能力加到 App ID 上；Sideloadly 同理，它只是把「用自己证书重签」自动化了，本身不提供证书。
+
+> 如果 Xcode 报 `com.apple.security.cs.allow-jit` 不被 profile 允许：这是 macOS 硬化运行时的键，iOS 上真正起作用的是 `get-task-allow`。可以从 `app/Madeira/Madeira.entitlements` 删掉这一行再签名，不影响 JIT。
+
+### I3. 签名报错怎么读
+
+| 报错 | 含义 | 处理 |
+| --- | --- | --- |
+| `0xE8008016` / Entitlements not permitted | profile 不含二进制里声明的某个 entitlement | 到开发者后台给这个 App ID 勾上 Increased Memory Limit，重新生成 profile |
+| `0xE8008015` / no provisioning profile | 设备 UDID 不在描述文件里 | 重新申请开发描述文件，或确认选了正确的设备 |
+| `The executable was signed with invalid entitlements` | 用了 Distribution 描述文件 | 换成 Development |
+| 装完点开闪退 | 同上，或证书被撤销 | 重新用开发签名；检查设备「VPN与设备管理」里证书是否受信任 |
