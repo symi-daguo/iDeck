@@ -15,6 +15,7 @@ runs, whether JIT attaches, or whether Steam signs in.
 
 import argparse
 import hashlib
+import os
 import plistlib
 import sys
 import zipfile
@@ -53,7 +54,7 @@ def main():
             digest.update(chunk)
     total = sum(info.file_size for info in zf.infolist())
     add(PASS, 'archive', '%d entries, %.0f MB packed, %.0f MB installed, sha256 %s'
-        % (len(names), __import__('os').path.getsize(args.ipa) / (1 << 20), total / (1 << 20),
+        % (len(names), os.path.getsize(args.ipa) / (1 << 20), total / (1 << 20),
            digest.hexdigest()[:16]))
 
     info = plistlib.loads(zf.read(APP + 'Info.plist'))

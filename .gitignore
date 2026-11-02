@@ -219,3 +219,7 @@ app/Madeira/licenses/components/
 app/Madeira/legal/CREDITS.md
 app/Madeira/legal/NOTICE
 app/Madeira/SteamClientPackages.json
+
+# Python bytecode from the local tooling
+__pycache__/
+*.pyc

@@ -175,6 +175,13 @@ def run(cmd, cwd=None, check=True):
 
 def stage_ipa(args, root, assets):
     step('IPA runtime payloads')
+    if not (assets / 'SHA256SUMS').is_file():
+        # Without the published sums every download goes unverified.
+        try:
+            download(release_url(args.release, 'SHA256SUMS', args.mirror),
+                     assets / 'SHA256SUMS', None, min_bytes=16)
+        except SystemExit:
+            log('  WARNING no SHA256SUMS; downloads cannot be verified against the release')
     name = 'iDeck-%s-build%s.ipa' % (args.version, args.build)
     ipa = assets / name
     if not ipa.is_file():
